@@ -18,7 +18,7 @@ namespace KeyChatServer.Controllers
         static Stack<Message> _messages = new Stack<Message>();
 
         static HashSet<AutoResetEvent> _resets = new HashSet<AutoResetEvent>();
-
+        
         static ChatController()
         {
 
@@ -34,6 +34,7 @@ namespace KeyChatServer.Controllers
         public UserInfo Authorize()
         {
             var name = Request.Query["name"][0] as string;
+            name = System.Net.WebUtility.UrlDecode(name);
             lock (_usersLocker)
             {
                 var user = new UserInfo() { key = Guid.NewGuid(), nick = name };
@@ -54,10 +55,11 @@ namespace KeyChatServer.Controllers
             var ws = Convert.ToInt16(Request.Query["ws"][0]);
             var outMsgs = new List<Message>();
             var start = DateTime.UtcNow;
+
             var reset = new AutoResetEvent(false);
             _resets.Add(reset);
             reset.WaitOne(ws * 1000);
-            
+            _resets.Remove(reset);
 
             foreach (var msg in _messages.TakeWhile(m => m.time_stamp > start))
             {
@@ -70,15 +72,22 @@ namespace KeyChatServer.Controllers
         public object send()
         {
             var text = Request.Query["message"][0] as string;
+            text = System.Net.WebUtility.UrlDecode(text);
             var key = Request.Query["key"][0] as string;
             
             try {
                 var guid = Guid.Parse(key);
-                var message = new Message { text = text, key = guid, time_stamp = DateTime.UtcNow, author_nick = _users.First(u => u.key == guid).nick };
+                var message = new Message
+                {
+                    text = text,
+                    key = guid,
+                    time_stamp = DateTime.UtcNow,
+                    author_nick = _users.First(u => u.key == guid).nick
+                };
                 lock (_messagesLocker)
                 {
                     _messages.Push(message);
-                    foreach(var reset in _resets)
+                    foreach (var reset in _resets)
                     {
                         reset.Set();
                     }
